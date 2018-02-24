@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use std;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -25,6 +27,8 @@ use session;
 use util;
 use positional::*;
 
+
+
 pub struct AudioOutPacket {
     pub type_: u32,
     pub target: u32,
@@ -47,7 +51,12 @@ pub struct AudioPacketCodec {
     pub session: Arc<Mutex<session::Session>>,
     pub crypt: Arc<Mutex<ocbaes128::CryptState>>,
     pub encoder_sequence: u64,
+    pub timer: std::time::SystemTime,
 }
+
+// pub fn get_version() {
+//     ovrAudio::ovrAudio_GetVersion()
+// }
 
 impl UdpCodec for AudioPacketCodec {
     type In = (SocketAddr, AudioInPacket);
@@ -64,7 +73,7 @@ impl UdpCodec for AudioPacketCodec {
             }
         }
 
-        let mut rdr = &mut Cursor::new(&data);
+        let rdr = &mut Cursor::new(&data);
         let aud_header = rdr.read_u8().unwrap();
         // println!("incoming aud_header: {}", aud_header);
         let aud_type = (aud_header & 0b11100000) >> 5;
@@ -83,7 +92,13 @@ impl UdpCodec for AudioPacketCodec {
             _ => vec![],
         };
 
-        let pos = PositionalAudio {x: 0.0, y: 0.0, z: 0.0};
+        //let t = std::time::SystemTime::now().intervals;
+        let t = self.timer.elapsed().unwrap();
+        let t = t.as_secs() as f64 + t.subsec_nanos() as f64 * 1e-9;
+        let x = t.sin() * 1000.0;
+        //println!("time {:?}", x);
+
+        let pos = PositionalAudio {x: x as f32, y: 0.0, z: 0.0};
 
         let idx: i32 = {
             let session = self.session.lock().unwrap();

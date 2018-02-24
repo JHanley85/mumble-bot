@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use std;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

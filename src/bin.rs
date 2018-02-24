@@ -6,7 +6,7 @@ use mumblebot::*;
 pub fn main() {
     pretty_env_logger::init().unwrap();
 
-    cmd();
+    let _ = cmd();
 
     // for i in 0..10 {
     //     println!("%%%%  ----  SESSION: {}  ----  %%%%", i);

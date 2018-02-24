@@ -1,6 +1,11 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 #![feature(conservative_impl_trait)]
+#![allow(deprecated)]
+
+#![feature(libc)]
+extern crate libc;
+extern crate libloading;
 
 extern crate gstreamer;
 extern crate gstreamer_app;
@@ -34,6 +39,9 @@ extern crate failure_derive;
 
 use clap::{Arg, App};
 extern crate futures;
+
+use std::env;
+use libloading::{Library, Symbol};
 
 use std::fs;
 use std::io::Cursor;
@@ -73,6 +81,7 @@ mod config;
 mod util;
 mod positional;
 use positional::*;
+mod ovraudio;
 
 pub mod gst;
 
@@ -153,6 +162,11 @@ pub fn say_test(raw_file: String, vox_out_tx: futures::sync::mpsc::Sender<Vec<u8
 pub fn cmd() -> Result<((), (), ()), Error> {
     // pretty_env_logger::init().unwrap();
 
+    // let _ = Library::new("ovraudio64.dll").unwrap();
+    println!("OVR_Audio version: {}", ovraudio::get_version());
+    // println!("OVR_Audio initialize: {:?}", ovraudio::initialize());
+    
+
     let matches = app().get_matches();
 
     let config: config::Config = {
@@ -163,24 +177,25 @@ pub fn cmd() -> Result<((), (), ()), Error> {
         toml::from_str(&config).unwrap()
     };
 
-    let raw_file = matches.value_of("say").unwrap_or("data/man16kHz.raw").to_string();
+    let _raw_file = matches.value_of("say").unwrap_or("data/man16kHz.raw").to_string();
     
     let local_addr: SocketAddr = config.mumble.local.parse().unwrap();
     let mumble_addr: SocketAddr = config.mumble.server.parse().unwrap();
     let mut core = Core::new().unwrap();
     let handle = core.handle();
 
-    let (vox_out_tx, vox_out_rx) = futures::sync::mpsc::channel::<Vec<u8>>(1000);
+    let (vox_out_tx, _vox_out_rx) = futures::sync::mpsc::channel::<Vec<u8>>(1000);
+
     let (vox_inp_tx, vox_inp_rx) = futures::sync::mpsc::channel::<(i32, Vec<u8>, PositionalAudio)>(1000);
 
-    let (app_logic, _tcp_tx, udp_tx) = run(local_addr, mumble_addr, vox_inp_tx.clone(), &handle);
+    let (app_logic, _tcp_tx, _udp_tx) = run(local_addr, mumble_addr, vox_inp_tx.clone(), &handle);
 
     //let say_task = say(vox_out_rx, udp_tx.clone());
 
     let kill_sink = gst::sink_main(vox_out_tx.clone());
     let (kill_src, vox_inp_task) = gst::src_main(vox_inp_rx);
 
-    let (kill_tx, kill_rx) = futures::sync::mpsc::channel::<()>(0);
+    let (_kill_tx, kill_rx) = futures::sync::mpsc::channel::<()>(0);
     let kill_switch = kill_rx
     .fold((), |_a, _b| {
         println!("kill_switch");
@@ -219,7 +234,8 @@ pub fn run<'a>(local_addr: SocketAddr, mumble_addr: SocketAddr,
         opus_decoders: HashMap::new(),
         session: Arc::clone(&session),
         crypt: Arc::clone(&crypt),
-        encoder_sequence: 0};
+        encoder_sequence: 0,
+        timer: std::time::SystemTime::now()};
 
     let udp_server_addr: SocketAddr = mumble_addr;
     let udp_local_addr: SocketAddr = local_addr;

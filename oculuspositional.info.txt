@@ -1,0 +1,89 @@
+Using OVRAudio: 1.18.0
+Factory Details:
+  Rank                     none (0)
+  Long-name                Oculus Positional Audio
+  Klass                    Filter/Effect/Audio
+  Description              Positional audio effect using oculus audio sdk
+  Author                   Naveen Sasalu <naveen.sasalu@redpillvr.com>
+
+Plugin Details:
+  Name                     veniceaudio
+  Description              Venice Audio Plugins
+  Filename                 D:/Proj-UE4/proj-redpill/SocialVenueUE4/Plugins/UE4-Venice/gstreamer/1.0/x86_64/lib\gstreamer-1.0\VeniceAudio.dll
+  Version                  0.0.1
+  License                  Proprietary
+  Source module            Red Pill SDK
+  Binary package           veniceaudio
+  Origin URL               Private Internal Repo
+
+GObject
+ +----GInitiallyUnowned
+       +----GstObject
+             +----GstElement
+                   +----GstBaseTransform
+                         +----GstAudioFilter
+                               +----GstOculusPositional
+
+Pad Templates:
+  SINK template: 'sink'
+    Availability: Always
+    Capabilities:
+      audio/x-raw
+                 format: { (string)F32LE }
+                   rate: 44100
+               channels: 2
+                 layout: interleaved
+
+  SRC template: 'src'
+    Availability: Always
+    Capabilities:
+      audio/x-raw
+                 format: { (string)F32LE }
+                   rate: 44100
+               channels: 2
+                 layout: interleaved
+
+
+Element Flags:
+  no flags set
+
+Element Implementation:
+  Has change_state() function: gst_audio_filter_change_state
+
+Element has no clocking capabilities.
+Element has no URI handling capabilities.
+
+Pads:
+  SINK: 'sink'
+    Pad Template: 'sink'
+  SRC: 'src'
+    Pad Template: 'src'
+
+Element Properties:
+  name                : The name of the object
+                        flags: readable, writable
+                        String. Default: "oculuspositional0"
+  parent              : The parent of the object
+                        flags: readable, writable
+                        Object of type "GstObject"
+  qos                 : Handle Quality-of-Service events
+                        flags: readable, writable
+                        Boolean. Default: false
+  in-use              : Boolean to enable/disable element
+                        flags: readable, writable, changeable only in NULL or READY state
+                        Boolean. Default: false
+  range-min           : Positional volume range minimum in centimeter
+                        flags: readable, writable
+                        Float. Range:               0 -   3.402823e+038 Default:             300
+  range-max           : Positional volume range maximum in centimeter
+                        flags: readable, writable
+                        Float. Range:               0 -   3.402823e+038 Default:           10000
+  x                   : X co-oridinate in centimeter
+                        flags: readable, writable
+                        Float. Range:  -3.402823e+038 -   3.402823e+038 Default:               0
+  y                   : Y co-oridinate in centimeter
+                        flags: readable, writable
+                        Float. Range:  -3.402823e+038 -   3.402823e+038 Default:               0
+  z                   : Z co-oridinate in centimeter
+                        flags: readable, writable
+                        Float. Range:  -3.402823e+038 -   3.402823e+038 Default:               0
