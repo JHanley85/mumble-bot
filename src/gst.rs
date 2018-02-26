@@ -17,10 +17,15 @@ use std::error::Error as StdError;
 use failure::Error;
 
 use futures;
-use futures::{Sink, Stream};
+use futures::{stream, Sink, Stream};
+use futures::stream::*;
 use futures::future::{err, loop_fn, ok, Future, IntoFuture, Loop};
 
+use std::io::{Read, Write};
+use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use positional::*;
+
+use ovraudio;
 
 #[derive(Debug, Fail)]
 #[fail(display = "Missing element {}", _0)]
@@ -165,22 +170,13 @@ pub fn sink_main(vox_out_tx: futures::sync::mpsc::Sender<Vec<u8>>) -> impl Fn() 
 fn src_pipeline() -> Result<(gst::Pipeline, Vec<gst_app::AppSrc>), Error> {
     gst::init()?;
 
-    // let caps0 = gst::Caps::new_simple(
-    //     "audio/x-raw",
-    //     &[
-    //         ("format", &gst_audio::AUDIO_FORMAT_F32.to_string()),
-    //         ("rate", &(44100i32)),
-    //         ("layout", &"interleaved"),
-    //         ("channels", &(2i32)),
-    //     ],
-    // );
-
     let caps = gst::Caps::new_simple(
         "audio/x-raw",
         &[
-            ("format", &gst_audio::AUDIO_FORMAT_S16.to_string()),
+            // ("format", &gst_audio::AUDIO_FORMAT_S16.to_string()),
+            ("format", &gst_audio::AUDIO_FORMAT_F32.to_string()),
             ("layout", &"interleaved"),
-            ("channels", &(1i32)),
+            ("channels", &(2i32)),
             ("rate", &(16000i32)),
         ],
     );
@@ -189,107 +185,17 @@ fn src_pipeline() -> Result<(gst::Pipeline, Vec<gst_app::AppSrc>), Error> {
 
     let mut appsrcs = Vec::new();
     for _ in 0..16 {
-        // let audiotestsrc =
-        //     gst::ElementFactory::make("audiotestsrc", None).ok_or(MissingElement("audiotestsrc"))?;
-
         let appsrc = gst::ElementFactory::make("appsrc", None).ok_or(MissingElement("appsrc"))?;
 
         let audioconvert0 =
             gst::ElementFactory::make("audioconvert", None).ok_or(MissingElement("audioconvert"))?;
-        // let audioresample0 = gst::ElementFactory::make("audioresample", None)
-        //     .ok_or(MissingElement("audioresample"))?;
-
-        // let audiobuffersplit = gst::ElementFactory::make("audiobuffersplit", None)
-        //     .ok_or(MissingElement("audiobuffersplit"))?;
-        // audiobuffersplit
-        //     .set_property("output-buffer-duration", &gst::Fraction::new(512, 44100))
-        //     .expect("Unable to set property in the element");
-        // // audiobuffersplit
-        // //     .set_property("strict-buffer-size", &(true))
-        // //     .expect("Unable to set property in the element");
-        // // audiobuffersplit
-        // //     .set_property("alignment-threshold", &(0u64))
-        // //     .expect("Unable to set property in the element");
-        // // audiobuffersplit
-        // //     .set_property("discont-wait", &(0u64))
-        // //     .expect("Unable to set property in the element");
-
-        // let redpillbasicsignaldata = gst::ElementFactory::make("redpillbasicsignaldata", None)
-        //     .ok_or(MissingElement("redpillbasicsignaldata"))?;
-        // redpillbasicsignaldata
-        //     .set_property("stem-id", &(0u64))
-        //     .expect("Unable to set property in the element");
-
-        // let audioconvert1 =
-        //     gst::ElementFactory::make("audioconvert", None).ok_or(MissingElement("audioconvert"))?;
-        // let audioresample1 = gst::ElementFactory::make("audioresample", None)
-        //     .ok_or(MissingElement("audioresample"))?;
-
-        // let capsfilter =
-        //     gst::ElementFactory::make("capsfilter", None).ok_or(MissingElement("capsfilter"))?;
-        // capsfilter
-        //     .set_property("caps", &caps0)
-        //     .expect("Unable to set property in the element");
-
-        // let positional = gst::ElementFactory::make("oculuspositional", None)
-        //     .ok_or(MissingElement("positional"))?;
-        // positional
-        //     .set_property("range-min", &(0.0f32))
-        //     .expect("Unable to set property in the element");
-        // positional
-        //     .set_property("range-max", &(1000.0f32))
-        //     .expect("Unable to set property in the element");
-        // positional
-        //     .set_property("in-use", &(true))
-        //     .expect("Unable to set property in the element");
-        // positional
-        //     .set_property("x", &(0.0f32))
-        //     .expect("Unable to set property in the element");
-        // positional
-        //     .set_property("y", &(0.0f32))
-        //     .expect("Unable to set property in the element");
-        // positional
-        //     .set_property("z", &(0.0f32))
-        //     .expect("Unable to set property in the element");
-
-        // let audioconvert2 =
-        //     gst::ElementFactory::make("audioconvert", None).ok_or(MissingElement("audioconvert"))?;
-        // let audioresample2 = gst::ElementFactory::make("audioresample", None)
-        //     .ok_or(MissingElement("audioresample"))?;
 
         let sink = gst::ElementFactory::make("autoaudiosink", None)
             .ok_or(MissingElement("autoaudiosink"))?;
         sink.set_property("async-handling", &true)
             .expect("Unable to set property in the element");
 
-        pipeline.add_many(&[
-            &appsrc,
-            // &audiotestsrc,
-            &audioconvert0,
-            // &audioresample0,
-            // &audiobuffersplit,
-            // &redpillbasicsignaldata,
-            // &audioconvert1,
-            // &audioresample1,
-            // &capsfilter,
-            // &positional,
-            // &audioconvert2,
-            // &audioresample2,
-            &sink,
-        ])?;
-
-        // audiotestsrc.link(&audioconvert0)?;
-        // appsrc.link(&audioconvert0)?;
-        // audioconvert0.link(&audioresample0)?;
-        // audioresample0.link(&audiobuffersplit)?;
-        // audiobuffersplit.link(&redpillbasicsignaldata)?;
-        // redpillbasicsignaldata.link(&audioconvert1)?;
-        // audioconvert1.link(&audioresample1)?;
-        // audioresample1.link(&capsfilter)?;
-        // capsfilter.link(&positional)?;
-        // positional.link(&audioconvert2)?;
-        // audioconvert2.link(&audioresample2)?;
-        // audioresample2.link(&sink)?;
+        pipeline.add_many(&[&appsrc, &audioconvert0, &sink])?;
 
         appsrc.link(&audioconvert0)?;
         audioconvert0.link(&sink)?;
@@ -303,58 +209,45 @@ fn src_pipeline() -> Result<(gst::Pipeline, Vec<gst_app::AppSrc>), Error> {
         appsrcs.push(appsrc);
     }
 
-    // let appsrcs = appsrcs.iter().map(|src| {
-    //     let appsrc = (*src).clone()
-    //         .dynamic_cast::<gst_app::AppSrc>()
-    //         .expect("Source element is expected to be an appsrc!");
-    //     appsrc.set_caps(&caps);
-    //     appsrc
-    // });
-
-    // let appsrcs = appsrcs.collect();
-
     pipeline.use_clock(None::<&gst::Clock>);
 
     Ok((pipeline, appsrcs))
 }
 
 fn src_rx<'a>(
-    _pipeline: gst::Pipeline,
-    appsrcs: Vec<gst_app::AppSrc>,
-    vox_inp_rx: futures::sync::mpsc::Receiver<(i32, Vec<u8>, PositionalAudio)>,
+    context: ovraudio::Context,
+    sound: i32,
+    appsrc: gst_app::AppSrc,
+    vox_inp_rx: futures::stream::Receiver<(std::vec::Vec<u8>, PositionalAudio), ()>,
 ) -> impl Future<Item = (), Error = std::io::Error> + 'a {
     vox_inp_rx
-        .fold(appsrcs, |appsrcs, (session, bytes, _pos)| {
-            if session >= 0 && session < 16 {
-                // pipeline.
+        .fold(appsrc, move |appsrc, (bytes, pos)| {
+            let samples = bytes
+                .chunks(2)
+                .map(|bytes| {
+                    let pcm = (&bytes[..]).read_i16::<LittleEndian>().unwrap();
+                    pcm as f32 / i16::max_value() as f32
+                })
+                .collect::<Vec<_>>();
 
-                let idx = session as usize;
-                let buffer =
-                    gst::Buffer::from_slice(bytes).expect("gst::Buffer::from_slice(bytes)");
-                //buffer.set_pts(i * 500 * gst::MSECOND);
-                // println!("x: {}", pos.x);
-                // elems[idx]
-                //     .1
-                //     .set_property("x", &(pos.x))
-                //     .expect("Unable to set property in the element");
-                // elems[idx]
-                //     .1
-                //     .set_property("y", &(pos.y))
-                //     .expect("Unable to set property in the element");
-                // elems[idx]
-                //     .1
-                //     .set_property("z", &(pos.z))
-                //     .expect("Unable to set property in the element");
-                // elems[idx].0.push_buffer(buffer);
-                if appsrcs[idx].push_buffer(buffer) != gst::FlowReturn::Ok {
-                    let _ = appsrcs[idx].end_of_stream();
-                    err(())
-                } else {
-                    ok(appsrcs)
-                }
-                // ok(elems)
+            ovraudio::set_pos(context, sound, pos.x, pos.y, pos.z);
+
+            let samples = ovraudio::spatializeMonoSourceInterleaved(context, sound, samples);
+            let bytes = samples
+                .iter()
+                .flat_map(|f| {
+                    let mut bytes = Vec::new();
+                    bytes.write_f32::<LittleEndian>(*f).unwrap();
+                    bytes
+                })
+                .collect::<Vec<_>>();
+
+            let buffer = gst::Buffer::from_slice(bytes).expect("gst::Buffer::from_slice(bytes)");
+            if appsrc.push_buffer(buffer) != gst::FlowReturn::Ok {
+                let _ = appsrc.end_of_stream();
+                err(())
             } else {
-                ok::<_, ()>(appsrcs)
+                ok(appsrc)
             }
         })
         .map(|_| ())
@@ -398,14 +291,16 @@ fn src_loop(pipeline: gst::Pipeline) -> Result<(), Error> {
 }
 
 pub fn src_main<'a>(
-    vox_inp_rx: futures::sync::mpsc::Receiver<(i32, Vec<u8>, PositionalAudio)>,
+    vox_inp_rxs: Vec<futures::stream::Receiver<(std::vec::Vec<u8>, PositionalAudio), ()>>,
 ) -> (
     impl Fn() -> (),
     impl Future<Item = (), Error = std::io::Error> + 'a,
 ) {
     let (pipeline, appsrcs) = src_pipeline().unwrap();
     let p0 = pipeline.clone();
-    let p1 = pipeline.clone();
+
+    let context = ovraudio::create_context();
+    println!("Using OVRAudio: {}", ovraudio::get_version());
 
     thread::spawn(move || {
         println!("start thread src_loop");
@@ -416,7 +311,15 @@ pub fn src_main<'a>(
     let kill_pipe = move || {
         let ev = gst::Event::new_eos().build();
         p0.send_event(ev);
+        ovraudio::destroy_context(context);
     };
 
-    (kill_pipe, src_rx(p1, appsrcs, vox_inp_rx))
+    let vox_tasks: Vec<_> = vox_inp_rxs
+        .into_iter()
+        .enumerate()
+        .map(|(i, vox)| src_rx(context, i as i32, appsrcs[i].clone(), vox))
+        .collect();
+    let vox_tasks = futures::future::join_all(vox_tasks).map(|_| ());
+
+    (kill_pipe, vox_tasks)
 }

@@ -28,26 +28,62 @@ pub fn get_version() -> String {
     }
 }
 
-pub fn create_context() -> () {
+pub type Context = sys::ovrAudioContext;
+
+pub fn create_context() -> Context {
     unsafe {
-        let context: *mut sys::ovrAudioContext = &mut sys::ovrAudioContextConfig {
-            acc_Size: 0,
-            acc_MaxNumSources: 1,
+        let config: *const sys::ovrAudioContextConfiguration = &sys::ovrAudioContextConfiguration {
+            acc_Size: std::mem::size_of::<sys::ovrAudioContextConfiguration>() as u32,
+            acc_MaxNumSources: 16,
             acc_SampleRate: 16000,
-            acc_BufferLength: 1024,
+            acc_BufferLength: 160,
         };
-        //let config: *const sys::ovrAudioContextConfiguration = std::os::raw::c_void;
-        //sys::ovrAudio_CreateConetn
+        let mut context: sys::ovrAudioContext = std::ptr::null_mut();
+        sys::ovrAudio_CreateContext(&mut context, config);
+        for sound in 0..16 {
+            sys::ovrAudio_SetAudioSourceRange(context, sound, 0.0, 1000.0);
+            sys::ovrAudio_SetAudioSourceAttenuationMode(
+                context,
+                sound,
+                sys::ovrAudioSourceAttenuationMode::ovrAudioSourceAttenuationMode_InverseSquare,
+                0.0,
+            );
+        }
+        context
     }
 }
 
-// pub fn initialize() -> Result<i32, i32> {
-//     unsafe {
-//         let res = sys::ovrAudio_Initialize();
-//         if res == sys::ovrSuccess as i32 {
-//             Ok(sys::ovrSuccess as i32)
-//         } else {
-//             Err(res)
-//         }
-//     }
-// }
+pub fn destroy_context(context: Context) {
+    unsafe {
+        sys::ovrAudio_DestroyContext(context);
+    }
+}
+
+pub fn set_range(context: Context, sound: i32, range_min: f32, range_max: f32) {
+    unsafe {
+        sys::ovrAudio_SetAudioSourceRange(context, sound, range_min, range_max);
+    }
+}
+
+pub fn set_pos(context: Context, sound: i32, x: f32, y: f32, z: f32) {
+    unsafe {
+        sys::ovrAudio_SetAudioSourcePos(context, sound, x, y, z);
+    }
+}
+
+pub fn spatializeMonoSourceInterleaved(context: Context, sound: i32, src: Vec<f32>) -> [f32; 320]{
+    unsafe {
+        let status = &mut 0;
+        let mut dst = [0f32; 320];
+        let dst_buf : *mut f32 = dst.as_mut_ptr();
+        let src_buf : *const f32 = src.as_ptr();
+        sys::ovrAudio_SpatializeMonoSourceInterleaved(
+            context,
+            sound,
+            status,
+            dst_buf,
+            src_buf,
+        );
+        dst
+    }
+}
