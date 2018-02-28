@@ -76,7 +76,7 @@ use varint::VarintWriter;
 mod rnd;
 mod config;
 mod util;
-mod positional;
+pub mod positional;
 use positional::*;
 mod ovraudio;
 

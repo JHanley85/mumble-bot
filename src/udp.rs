@@ -95,17 +95,17 @@ impl UdpCodec for AudioPacketCodec {
                 match pos() {
                     Ok(pos) => (data, pos),
                     _ => {
-                        // (data, PositionalAudio::zero())
-                        let t = self.timer.elapsed().unwrap();
-                        let t = t.as_secs() as f64 + t.subsec_nanos() as f64 * 1e-9;
-                        let x = t.sin() * 20.0;
-                        let z = t.cos() * 20.0;
-                        let pos = PositionalAudio {
-                            x: x as f32,
-                            y: 0.0,
-                            z: z as f32,
-                        };
-                        (data, pos)
+                        (data, PositionalAudio::zero())
+                        // let t = self.timer.elapsed().unwrap();
+                        // let t = t.as_secs() as f64 + t.subsec_nanos() as f64 * 1e-9;
+                        // let x = t.sin() * 20.0;
+                        // let z = t.cos() * 20.0;
+                        // let pos = PositionalAudio {
+                        //     x: x as f32,
+                        //     y: 0.0,
+                        //     z: z as f32,
+                        // };
+                        // (data, pos)
                     }
                 }
             }
