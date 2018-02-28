@@ -199,7 +199,7 @@ pub fn cmd() -> Result<((), (), (), ()), Error> {
     let mut voxs = Vec::new();
     let mut vox_inp_rxs = Vec::new();
     for _ in 0..16 {
-        let (vox_inp_tx, vox_inp_rx) = futures::stream::channel::<(Vec<u8>, PositionalAudio), ()>();
+        let (vox_inp_tx, vox_inp_rx) = futures::sync::mpsc::channel::<(Vec<u8>, PositionalAudio)>(1000);
         voxs.push(VoxIn {
             session_id: 999999999,
             last_io: std::time::SystemTime::now(),
