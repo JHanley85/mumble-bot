@@ -194,7 +194,7 @@ pub fn udp_recv_loop<'a>(
                         let vox = voxs.remove(idx);
                         vox.tx
                     };
-                    tx.send(Ok((packet.pcm, packet.pos)))
+                    tx.send((packet.pcm, packet.pos))
                         .and_then(move |tx| {
                             let vox = VoxIn {
                                 session_id: session_id,

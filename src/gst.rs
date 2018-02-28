@@ -218,7 +218,7 @@ fn src_rx<'a>(
     context: ovraudio::Context,
     sound: i32,
     appsrc: gst_app::AppSrc,
-    vox_inp_rx: futures::stream::Receiver<(std::vec::Vec<u8>, PositionalAudio), ()>,
+    vox_inp_rx: futures::sync::mpsc::Receiver<(std::vec::Vec<u8>, PositionalAudio)>,
 ) -> impl Future<Item = (), Error = std::io::Error> + 'a {
     vox_inp_rx
         .fold(appsrc, move |appsrc, (bytes, pos)| {
@@ -291,7 +291,7 @@ fn src_loop(pipeline: gst::Pipeline) -> Result<(), Error> {
 }
 
 pub fn src_main<'a>(
-    vox_inp_rxs: Vec<futures::stream::Receiver<(std::vec::Vec<u8>, PositionalAudio), ()>>,
+    vox_inp_rxs: Vec<futures::sync::mpsc::Receiver<(std::vec::Vec<u8>, PositionalAudio)>>,
 ) -> (
     impl Fn() -> (),
     impl Future<Item = (), Error = std::io::Error> + 'a,

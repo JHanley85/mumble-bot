@@ -18,5 +18,5 @@ impl PositionalAudio {
 pub struct VoxIn {
     pub session_id: u64,
     pub last_io: std::time::SystemTime,
-    pub tx: futures::stream::Sender<(Vec<u8>, PositionalAudio), ()>,
+    pub tx: futures::sync::mpsc::Sender<(Vec<u8>, PositionalAudio)>,
 }
