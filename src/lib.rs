@@ -4,7 +4,7 @@
 #![allow(deprecated)]
 #![feature(libc)]
 extern crate libc;
-
+extern crate cgmath;
 extern crate byte_slice_cast;
 extern crate glib;
 extern crate gstreamer;
@@ -81,7 +81,7 @@ mod util;
 pub mod positional;
 use positional::*;
 mod ovraudio;
-
+use cgmath::*;
 pub mod gst;
 
 fn app() -> App<'static, 'static> {
@@ -200,6 +200,7 @@ pub fn cmd() -> Result<((), (), (), ()), Error> {
     let handle = core.handle();
 
     let (positional_tx, positional_rx) = futures::sync::mpsc::channel::<PositionalAudio>(10);
+    let (listener_tx, listener_rx) = futures::sync::mpsc::channel::<PositionalAudio>(10);
 
     let (vox_out_tx, vox_out_rx) = futures::sync::mpsc::channel::<Vec<u8>>(1000);
 
@@ -220,7 +221,7 @@ pub fn cmd() -> Result<((), (), (), ()), Error> {
     let vox_out_task = say(vox_out_rx, positional_rx, udp_tx.clone());
 
     let kill_sink = gst::sink_main(vox_out_tx.clone());
-    let (kill_src, vox_inp_task) = gst::src_main(vox_inp_rxs);
+    let (kill_src, vox_inp_task) = gst::src_main(listener_rx, vox_inp_rxs);
 
     let (_kill_tx, kill_rx) = futures::sync::mpsc::channel::<()>(0);
     let kill_switch = kill_rx

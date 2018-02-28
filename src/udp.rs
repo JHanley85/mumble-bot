@@ -27,6 +27,7 @@ use varint::VarintWriter;
 use session;
 use util;
 use positional::*;
+use cgmath::*;
 
 pub struct AudioOutPacket {
     pub type_: u32,
@@ -90,7 +91,7 @@ impl UdpCodec for AudioPacketCodec {
                     let x = rdr.read_f32::<LittleEndian>()?;
                     let y = rdr.read_f32::<LittleEndian>()?;
                     let z = rdr.read_f32::<LittleEndian>()?;
-                    Ok(PositionalAudio { x: x, y: y, z: z })
+                    Ok(PositionalAudio { loc: vec3(x, y, z), rot: Quaternion::one() })
                 };
                 match pos() {
                     Ok(pos) => (data, pos),
@@ -133,9 +134,9 @@ impl UdpCodec for AudioPacketCodec {
                 };
                 data.write_varint(opus_len).unwrap();
                 data.write_all(&frame).unwrap();
-                data.write_f32::<BigEndian>(packet.pos.x).unwrap();
-                data.write_f32::<BigEndian>(packet.pos.y).unwrap();
-                data.write_f32::<BigEndian>(packet.pos.z).unwrap();
+                data.write_f32::<BigEndian>(packet.pos.loc.x).unwrap();
+                data.write_f32::<BigEndian>(packet.pos.loc.y).unwrap();
+                data.write_f32::<BigEndian>(packet.pos.loc.z).unwrap();
             }
             _ => panic!("AudioPacketCodec:encode type unknown"),
         }

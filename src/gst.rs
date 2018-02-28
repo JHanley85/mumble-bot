@@ -24,7 +24,7 @@ use futures::future::{err, loop_fn, ok, Future, IntoFuture, Loop};
 use std::io::{Read, Write};
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use positional::*;
-
+use cgmath::*;
 use ovraudio;
 
 #[derive(Debug, Fail)]
@@ -218,10 +218,11 @@ fn src_rx<'a>(
     context: ovraudio::Context,
     sound: i32,
     appsrc: gst_app::AppSrc,
+    listener: Arc<Mutex<PositionalAudio>>,
     vox_inp_rx: futures::sync::mpsc::Receiver<(std::vec::Vec<u8>, PositionalAudio)>,
 ) -> impl Future<Item = (), Error = std::io::Error> + 'a {
     vox_inp_rx
-        .fold(appsrc, move |appsrc, (bytes, pos)| {
+        .fold((listener, appsrc), move |(listener, appsrc), (bytes, pos)| {
             let samples = bytes
                 .chunks(2)
                 .map(|bytes| {
@@ -230,7 +231,19 @@ fn src_rx<'a>(
                 })
                 .collect::<Vec<_>>();
 
-            ovraudio::set_pos(context, sound, pos.x, pos.y, pos.z);
+            {
+                let listener = listener.lock().unwrap();
+                let xform = Decomposed {
+                    scale: 1f32,
+                    rot: listener.rot,
+                    disp: listener.loc,
+                };
+                let loc = vec3(pos.loc.x, pos.loc.y, pos.loc.z);
+                let inv = xform.inverse_transform().unwrap();
+                let loc = inv.transform_vector(loc);
+                let loc = vec3(loc.y, -loc.z, -loc.x);
+                ovraudio::set_pos(context, sound, loc.x, loc.y, loc.z);
+            }
 
             let samples = ovraudio::spatializeMonoSourceInterleaved(context, sound, samples);
             let bytes = samples
@@ -247,7 +260,7 @@ fn src_rx<'a>(
                 let _ = appsrc.end_of_stream();
                 err(())
             } else {
-                ok(appsrc)
+                ok((listener, appsrc))
             }
         })
         .map(|_| ())
@@ -291,6 +304,7 @@ fn src_loop(pipeline: gst::Pipeline) -> Result<(), Error> {
 }
 
 pub fn src_main<'a>(
+    listener_rx: futures::sync::mpsc::Receiver<PositionalAudio>,
     vox_inp_rxs: Vec<futures::sync::mpsc::Receiver<(std::vec::Vec<u8>, PositionalAudio)>>,
 ) -> (
     impl Fn() -> (),
@@ -314,10 +328,20 @@ pub fn src_main<'a>(
         ovraudio::destroy_context(context);
     };
 
+    let listener = Arc::new(Mutex::new(PositionalAudio::zero()));
+    listener_rx.fold(listener.clone(), |listener, pos| {
+        {
+            let mut listener = listener.lock().unwrap();
+            listener.loc = pos.loc;
+            listener.rot = pos.rot;
+        }
+        Ok::<_,()>(listener)
+    });
+
     let vox_tasks: Vec<_> = vox_inp_rxs
         .into_iter()
         .enumerate()
-        .map(|(i, vox)| src_rx(context, i as i32, appsrcs[i].clone(), vox))
+        .map(|(i, vox)| src_rx(context, i as i32, appsrcs[i].clone(), listener.clone(), vox))
         .collect();
     let vox_tasks = futures::future::join_all(vox_tasks).map(|_| ());
 

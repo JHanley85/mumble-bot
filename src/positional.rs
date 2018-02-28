@@ -2,17 +2,17 @@ use futures::{Sink, Stream};
 use futures::future::{Future, ok, err, loop_fn, IntoFuture, Loop};
 use futures;
 use std;
+use cgmath::*;
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct PositionalAudio {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
+    pub loc : Vector3<f32>,
+    pub rot : Quaternion<f32>,
 }
 
 impl PositionalAudio {
     pub fn zero() -> PositionalAudio {
-        PositionalAudio {x: 0f32, y: 0f32, z: 0f32}
+        PositionalAudio {loc: Vector3::zero(), rot: Quaternion::one()}
     }
 }
 
