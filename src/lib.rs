@@ -112,6 +112,7 @@ fn app() -> App<'static, 'static> {
 
 pub fn say<'a>(
     vox_out_rx: futures::sync::mpsc::Receiver<Vec<u8>>,
+    pos_rx: futures::sync::mpsc::Receiver<PositionalAudio>,
     udp_tx: futures::sync::mpsc::Sender<udp::AudioOutPacket>,
 ) -> impl Future<Item = (), Error = Error> + 'a {
     // Hz * channel * ms / 1000
@@ -194,6 +195,8 @@ pub fn cmd() -> Result<((), (), (), ()), Error> {
     let mut core = Core::new().unwrap();
     let handle = core.handle();
 
+    let (positional_tx, positional_rx) = futures::sync::mpsc::channel::<PositionalAudio>(10);
+
     let (vox_out_tx, vox_out_rx) = futures::sync::mpsc::channel::<Vec<u8>>(1000);
 
     let mut voxs = Vec::new();
@@ -210,7 +213,7 @@ pub fn cmd() -> Result<((), (), (), ()), Error> {
 
     let (app_logic, _tcp_tx, udp_tx) = run(local_addr, mumble_addr, voxs, &handle);
 
-    let vox_out_task = say(vox_out_rx, udp_tx.clone());
+    let vox_out_task = say(vox_out_rx, positional_rx, udp_tx.clone());
 
     let kill_sink = gst::sink_main(vox_out_tx.clone());
     let (kill_src, vox_inp_task) = gst::src_main(vox_inp_rxs);
