@@ -3,6 +3,7 @@ use futures::future::{Future, ok, err, loop_fn, IntoFuture, Loop};
 use futures;
 use std;
 
+#[derive(Clone, Debug)]
 pub struct PositionalAudio {
     pub x: f32,
     pub y: f32,

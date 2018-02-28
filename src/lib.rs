@@ -37,6 +37,7 @@ extern crate failure_derive;
 
 use clap::{App, Arg};
 extern crate futures;
+extern crate stream_combinators;
 
 use std::env;
 // use std::iter::{self, *};
@@ -51,6 +52,7 @@ use std::sync::{Arc, Mutex};
 
 use futures::{Sink, Stream};
 use futures::future::{err, loop_fn, ok, Future, IntoFuture, Loop};
+use stream_combinators::*;
 
 use openssl::ssl::{SslContext, SslMethod, SSL_VERIFY_PEER};
 use openssl::x509::X509_FILETYPE_PEM;
@@ -121,7 +123,7 @@ pub fn say<'a>(
     let sample_ms: u32 = 10;
     let sample_size: u32 = sample_rate * sample_channels * sample_ms / 1000;
 
-    vox_out_rx
+    let vox = vox_out_rx
         .map(|segment| futures::stream::iter_ok::<_, ()>(segment))
         .flatten()
         .chunks(2)
@@ -129,9 +131,11 @@ pub fn say<'a>(
             let pcm = (&raw[..]).read_i16::<LittleEndian>().unwrap();
             ok::<i16, ()>(pcm)
         })
-        .chunks(sample_size as usize)
-        .fold(udp_tx, move |udp_tx, chunk| {
-            let mut chunk = Vec::from(chunk);
+        .chunks(sample_size as usize);
+
+    zip_latest_right::zip_latest_right(pos_rx, vox)
+        .fold(udp_tx, move |udp_tx, (pos, chunk)| {
+            let mut chunk = Vec::from(chunk.unwrap());
             chunk.resize(sample_size as usize, 0);
             let packet = udp::AudioOutPacket {
                 type_: 0b100,
@@ -139,7 +143,7 @@ pub fn say<'a>(
                 pcm: chunk,
                 done: false,
                 timestamp: 0,
-                pos: PositionalAudio::zero(),
+                pos: pos.unwrap_or(PositionalAudio::zero()),
             };
             udp_tx.send(packet).map_err(|_| ())
         })
