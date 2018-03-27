@@ -309,6 +309,7 @@ pub fn src_main<'a>(
 ) -> (
     impl Fn() -> (),
     impl Future<Item = (), Error = std::io::Error> + 'a,
+    impl Future<Item = (), Error = std::io::Error> + 'a,
 ) {
     let (pipeline, appsrcs) = src_pipeline().unwrap();
     let p0 = pipeline.clone();
@@ -329,14 +330,16 @@ pub fn src_main<'a>(
     };
 
     let listener = Arc::new(Mutex::new(PositionalAudio::zero()));
-    listener_rx.fold(listener.clone(), |listener, pos| {
+    let listener_task = listener_rx.fold(listener.clone(), |listener, pos| {
         {
             let mut listener = listener.lock().unwrap();
             listener.loc = pos.loc;
             listener.rot = pos.rot;
         }
         Ok::<_,()>(listener)
-    });
+    })
+    .map(|_| ())
+    .map_err(|_| std::io::Error::new(ErrorKind::Other, "listener"));
 
     let vox_tasks: Vec<_> = vox_inp_rxs
         .into_iter()
@@ -345,5 +348,5 @@ pub fn src_main<'a>(
         .collect();
     let vox_tasks = futures::future::join_all(vox_tasks).map(|_| ());
 
-    (kill_pipe, vox_tasks)
+    (kill_pipe, vox_tasks, listener_task)
 }

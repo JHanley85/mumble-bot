@@ -174,7 +174,7 @@ pub fn say_test(raw_file: String, vox_out_tx: futures::sync::mpsc::Sender<Vec<u8
     println!("END: say_test");
 }
 
-pub fn cmd() -> Result<((), (), (), ()), Error> {
+pub fn cmd() -> Result<((), (), (), (), ()), Error> {
     // pretty_env_logger::init().unwrap();
 
     // println!("OVR_Audio version: {}", ovraudio::get_version());
@@ -221,7 +221,7 @@ pub fn cmd() -> Result<((), (), (), ()), Error> {
     let vox_out_task = say(vox_out_rx, positional_rx, udp_tx.clone());
 
     let kill_sink = gst::sink_main(vox_out_tx.clone());
-    let (kill_src, vox_inp_task) = gst::src_main(listener_rx, vox_inp_rxs);
+    let (kill_src, vox_inp_task, listener_task) = gst::src_main(listener_rx, vox_inp_rxs);
 
     let (_kill_tx, kill_rx) = futures::sync::mpsc::channel::<()>(0);
     let kill_switch = kill_rx
@@ -240,7 +240,7 @@ pub fn cmd() -> Result<((), (), (), ()), Error> {
     //     kill_tx.wait().send(()).unwrap();
     // });
 
-    let tasks = Future::join4(kill_switch, app_logic, vox_inp_task, vox_out_task);
+    let tasks = Future::join5(kill_switch, app_logic, vox_inp_task, vox_out_task, listener_task);
     core.run(tasks)
 }
 
