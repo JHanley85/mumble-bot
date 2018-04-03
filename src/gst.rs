@@ -42,7 +42,7 @@ struct ErrorMessage {
 }
 
 fn sink_pipeline(
-    device: Option<i32>,
+    device: Option<String>,
     vox_out_tx: futures::sync::mpsc::Sender<Vec<u8>>,
 ) -> Result<gst::Pipeline, Error> {
     gst::init()?;
@@ -51,9 +51,9 @@ fn sink_pipeline(
 
     let src = match device {
         Some(device) => {
-            let src = gst::ElementFactory::make("osxaudiosrc", None)
-                .ok_or(MissingElement("osxaudiosrc"))?;
-            src.set_property("device", &device)
+            let src = gst::ElementFactory::make("directsoundsrc", None)
+                .ok_or(MissingElement("directsoundsrc"))?;
+            src.set_property("device-name", &device)
                 .expect("Unable to set property in the element");
             src
         }
@@ -167,7 +167,7 @@ fn sink_loop(pipeline: gst::Pipeline) -> Result<(), Error> {
 }
 
 pub fn sink_main(
-    device: Option<i32>,
+    device: Option<String>,
     vox_out_tx: futures::sync::mpsc::Sender<Vec<u8>>,
 ) -> impl Fn() -> () {
     let pipeline = sink_pipeline(device, vox_out_tx).unwrap();

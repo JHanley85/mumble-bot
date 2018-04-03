@@ -220,7 +220,7 @@ pub fn cmd() -> Result<((), (), (), (), ()), Error> {
 
     let vox_out_task = say(vox_out_rx, positional_rx, udp_tx.clone());
 
-    let kill_sink = gst::sink_main(Some(188), vox_out_tx.clone());
+    let kill_sink = gst::sink_main(Some("Input".to_string()), vox_out_tx.clone());
     let (kill_src, vox_inp_task, listener_task) = gst::src_main(listener_rx, vox_inp_rxs);
 
     let (_kill_tx, kill_rx) = futures::sync::mpsc::channel::<()>(0);
