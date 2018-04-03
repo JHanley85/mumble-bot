@@ -1,8 +1,8 @@
+use self::gst::prelude::*;
+use glib;
 use gstreamer as gst;
 use gstreamer_app as gst_app;
 use gstreamer_audio as gst_audio;
-use self::gst::prelude::*;
-use glib;
 
 use byte_slice_cast::*;
 
@@ -10,22 +10,22 @@ use std;
 use std::i16;
 use std::i32;
 use std::io::ErrorKind;
-use std::thread;
 use std::sync::{Arc, Mutex};
+use std::thread;
 
-use std::error::Error as StdError;
 use failure::Error;
+use std::error::Error as StdError;
 
 use futures;
-use futures::{stream, Sink, Stream};
-use futures::stream::*;
 use futures::future::{err, loop_fn, ok, Future, IntoFuture, Loop};
+use futures::stream::*;
+use futures::{stream, Sink, Stream};
 
-use std::io::{Read, Write};
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
-use positional::*;
 use cgmath::*;
 use ovraudio;
+use positional::*;
+use std::io::{Read, Write};
 
 #[derive(Debug, Fail)]
 #[fail(display = "Missing element {}", _0)]
@@ -41,13 +41,26 @@ struct ErrorMessage {
     cause: glib::Error,
 }
 
-fn sink_pipeline(vox_out_tx: futures::sync::mpsc::Sender<Vec<u8>>) -> Result<gst::Pipeline, Error> {
+fn sink_pipeline(
+    device: Option<i32>,
+    vox_out_tx: futures::sync::mpsc::Sender<Vec<u8>>,
+) -> Result<gst::Pipeline, Error> {
     gst::init()?;
 
     let pipeline = gst::Pipeline::new(None);
 
-    let src =
-        gst::ElementFactory::make("autoaudiosrc", None).ok_or(MissingElement("autoaudiosrc"))?;
+    let src = match device {
+        Some(device) => {
+            let src = gst::ElementFactory::make("osxaudiosrc", None)
+                .ok_or(MissingElement("osxaudiosrc"))?;
+            src.set_property("device", &device)
+                .expect("Unable to set property in the element");
+            src
+        }
+        None => {
+            gst::ElementFactory::make("autoaudiosrc", None).ok_or(MissingElement("autoaudiosrc"))?
+        }
+    };
 
     let resample =
         gst::ElementFactory::make("audioresample", None).ok_or(MissingElement("audioresample"))?;
@@ -153,12 +166,17 @@ fn sink_loop(pipeline: gst::Pipeline) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn sink_main(vox_out_tx: futures::sync::mpsc::Sender<Vec<u8>>) -> impl Fn() -> () {
-    let pipeline = sink_pipeline(vox_out_tx).unwrap();
+pub fn sink_main(
+    device: Option<i32>,
+    vox_out_tx: futures::sync::mpsc::Sender<Vec<u8>>,
+) -> impl Fn() -> () {
+    let pipeline = sink_pipeline(device, vox_out_tx).unwrap();
     let p = pipeline.clone();
 
     thread::spawn(move || {
+        println!("start thread sink_loop");
         let _ = sink_loop(pipeline);
+        println!("stop thread sink_loop");
     });
 
     move || {
@@ -173,7 +191,6 @@ fn src_pipeline() -> Result<(gst::Pipeline, Vec<gst_app::AppSrc>), Error> {
     let caps = gst::Caps::new_simple(
         "audio/x-raw",
         &[
-            // ("format", &gst_audio::AUDIO_FORMAT_S16.to_string()),
             ("format", &gst_audio::AUDIO_FORMAT_F32.to_string()),
             ("layout", &"interleaved"),
             ("channels", &(2i32)),
@@ -222,47 +239,51 @@ fn src_rx<'a>(
     vox_inp_rx: futures::sync::mpsc::Receiver<(std::vec::Vec<u8>, PositionalAudio)>,
 ) -> impl Future<Item = (), Error = std::io::Error> + 'a {
     vox_inp_rx
-        .fold((listener, appsrc), move |(listener, appsrc), (bytes, pos)| {
-            let samples = bytes
-                .chunks(2)
-                .map(|bytes| {
-                    let pcm = (&bytes[..]).read_i16::<LittleEndian>().unwrap();
-                    pcm as f32 / i16::max_value() as f32
-                })
-                .collect::<Vec<_>>();
+        .fold(
+            (listener, appsrc),
+            move |(listener, appsrc), (bytes, pos)| {
+                let samples = bytes
+                    .chunks(2)
+                    .map(|bytes| {
+                        let pcm = (&bytes[..]).read_i16::<LittleEndian>().unwrap();
+                        pcm as f32 / i16::max_value() as f32
+                    })
+                    .collect::<Vec<_>>();
 
-            {
-                let listener = listener.lock().unwrap();
-                let xform = Decomposed {
-                    scale: 1f32,
-                    rot: listener.rot,
-                    disp: listener.loc,
-                };
-                let loc = vec3(pos.loc.x, pos.loc.y, pos.loc.z);
-                let inv = xform.inverse_transform().unwrap();
-                let loc = inv.transform_vector(loc);
-                let loc = vec3(loc.y, -loc.z, -loc.x);
-                ovraudio::set_pos(context, sound, loc.x, loc.y, loc.z);
-            }
+                {
+                    let listener = listener.lock().unwrap();
+                    let xform = Decomposed {
+                        scale: 1f32,
+                        rot: listener.rot,
+                        disp: listener.loc,
+                    };
+                    let loc = vec3(pos.loc.x, pos.loc.y, pos.loc.z);
+                    let inv = xform.inverse_transform().unwrap();
+                    let loc = inv.transform_vector(loc);
+                    let loc = vec3(loc.y, -loc.z, -loc.x);
+                    ovraudio::set_pos(context, sound, loc.x, loc.y, loc.z);
+                }
 
-            let samples = ovraudio::spatializeMonoSourceInterleaved(context, sound, samples);
-            let bytes = samples
-                .iter()
-                .flat_map(|f| {
-                    let mut bytes = Vec::new();
-                    bytes.write_f32::<LittleEndian>(*f).unwrap();
-                    bytes
-                })
-                .collect::<Vec<_>>();
+                let samples = ovraudio::spatializeMonoSourceInterleaved(context, sound, samples);
+                let bytes = samples
+                    .iter()
+                    .flat_map(|f| {
+                        let mut bytes = Vec::new();
+                        bytes.write_f32::<LittleEndian>(*f).unwrap();
+                        bytes
+                    })
+                    .collect::<Vec<_>>();
 
-            let buffer = gst::Buffer::from_slice(bytes).expect("gst::Buffer::from_slice(bytes)");
-            if appsrc.push_buffer(buffer) != gst::FlowReturn::Ok {
-                let _ = appsrc.end_of_stream();
-                err(())
-            } else {
-                ok((listener, appsrc))
-            }
-        })
+                let buffer =
+                    gst::Buffer::from_slice(bytes).expect("gst::Buffer::from_slice(bytes)");
+                if appsrc.push_buffer(buffer) != gst::FlowReturn::Ok {
+                    let _ = appsrc.end_of_stream();
+                    err(())
+                } else {
+                    ok((listener, appsrc))
+                }
+            },
+        )
         .map(|_| ())
         .map_err(|_| std::io::Error::new(ErrorKind::Other, "vox_inp_task"))
 }
@@ -330,16 +351,17 @@ pub fn src_main<'a>(
     };
 
     let listener = Arc::new(Mutex::new(PositionalAudio::zero()));
-    let listener_task = listener_rx.fold(listener.clone(), |listener, pos| {
-        {
-            let mut listener = listener.lock().unwrap();
-            listener.loc = pos.loc;
-            listener.rot = pos.rot;
-        }
-        Ok::<_,()>(listener)
-    })
-    .map(|_| ())
-    .map_err(|_| std::io::Error::new(ErrorKind::Other, "listener"));
+    let listener_task = listener_rx
+        .fold(listener.clone(), |listener, pos| {
+            {
+                let mut listener = listener.lock().unwrap();
+                listener.loc = pos.loc;
+                listener.rot = pos.rot;
+            }
+            Ok::<_, ()>(listener)
+        })
+        .map(|_| ())
+        .map_err(|_| std::io::Error::new(ErrorKind::Other, "listener"));
 
     let vox_tasks: Vec<_> = vox_inp_rxs
         .into_iter()
